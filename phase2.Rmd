@@ -1,0 +1,421 @@
+---
+title: 'Predicting whether a Mushroom is Edible or Poisonous'
+subtitle: 'MATH 2319 Machine Learning Applied Project Phase II'
+author: "Wesley Paul Nderi (s3635870) "
+date: "11/06/2018"
+output: html_notebook
+---
+
+### 1. Introduction \label{sec1}
+
+
+The objective of this project was to build classifiers to predict whether a mushroom is edible or poisonous based on its descriptive features. The dataset was sourced from [Kaggle](https://www.kaggle.com/uciml/mushroom-classification ) although it was originally cited in the UCI Machine Learning Repository.
+
+In **Phase I**, we preprocessed the data and omitted some descriptive features. In **Phase II** we shall build three binary-classifiers on the cleaned data. Specifically, the classifiers considered in this report are the Decision tree, Naive-Bayes and Random-Forest.
+
+The rest of this report is organised as follows. Section 2 describes an overview of our methodology. Section 3 discusses the classifiers’ fine-tuning process and detailed performance analysis of each classifier.In Section 4, we compare the performance of the classifiers using the same resampling method. Section 5 critiques our methodology. The final section ends with a summary.
+
+### 2. Methodology
+
+We have considered three classifiers - **Decision Tree**, **Naive Bayes** and **Random Forest**. The key consideration for selecting these classifiers was that all the features in the *Mushroom* dataset are categorical in nature and these classifiers would be the most appropriate(Kelleher, Mac Namee & D'Arcy 2015).
+
+Each classifier was trained to make probability predictions in order to allow adjustment of the prediction threshold to refine the performance. The full data set was split into 70 % training set and 30 % test set. In the fine-tuning process, we ran a five-fold cross-validation stratified sampling on each classifier. We employ the use of the stratified sampling in order to address the slight  imbalance in the class of the target feature. In addition, as an alternative strategy we also employ a random search with a maximum of 100 iterations to determine the optimum hyperparameters and visualize their importance on the mean of the mean misclassification error rate. We compare and visualize the effect of these hyperparameter values on the mean misclassification error rate.
+
+For each classifer, we determined the optimal probability threshold. Using the tuned hyperparameters and the optimal thresholds, we made predictions on the test data. The performance measure relied on in this report is the **mean misclassification error rate (mmce)**. This is a measure of the number of incorrect predictions made by the model divided by the total number of predictions made. 
+
+In addition to mmce, we have also used the confusion matrix and visualizations of the receiver operating characteristic(ROC) curves on the test data to evaluate classifiers’ performance. The modelling was implemented in R with the mlr package (Bischl et al. 2016).
+
+### Preliminaries 
+
+In this project we used the following R packages.
+
+```{r,message=FALSE}
+library(mlr)
+library(rpart)
+library(rpart.plot)
+library(caTools)
+library(randomForest)
+library(tidyverse)
+```
+
+We revisit a quick summary of the data before we embark on modelling. 
+
+```{r}
+library(readr)
+mushroom1<-read.csv("mushrooms.csv",sep = ",",header = TRUE)
+summary(mushroom1)
+```
+
+There are a total of 21 categorical variables inclusive of the target-**class**. 
+```{r}
+str(mushroom1)
+```
+
+Specifically, we can see that we have a binary target feature **"class"** with the labels *e*-edible and *p*-poisonous.
+```{r}
+unique(mushroom1$class)
+```
+
+In addition we see that there is a slight imbalance between the two levels of the target feature.
+```{r}
+table(mushroom1$class)
+```
+
+
+```{r}
+# Set a common random seed for reproducibility
+set.seed(123)
+```
+
+We split the dataset into 70 % training set and 30 % test set.
+```{r}
+split = sample.split(mushroom1$class, SplitRatio = 0.7)
+training_setm = subset(mushroom1, split == TRUE)
+test_setm = subset(mushroom1, split == FALSE)
+```
+
+Both levels appear to be well balanced and representative of the dataset in both the training and test set.
+```{r}
+prop.table(table(training_setm$class))
+prop.table(table(test_setm$class))
+```
+
+
+### 2.1.  Basic configuration 
+
+```{r}
+# Configure classification task
+task <- makeClassifTask(data = training_setm, target = 'class', id = 'mushroom')
+```
+
+
+```{r}
+# Configure learners with prediction as probability
+learner1 <- makeLearner('classif.rpart', predict.type = 'prob',fix.factors.prediction = TRUE) # baseline learner
+learner2 <- makeLearner('classif.naiveBayes', predict.type = 'prob')
+learner3 <- makeLearner('classif.randomForest', predict.type = 'prob')
+
+```
+
+
+## 3. Model fine-tuning
+
+### 3.1  Decision-tree 
+The decision tree has several default hyperparameters as can be observed below.
+
+```{r}
+getParamSet(learner1)
+```
+
+Using default parameters for each of the hyperparameters as listed above, we can evaluate the mmce performance using a 5 fold cross validation and we observe that the error, 0.006, is quite small.
+
+```{r}
+set.seed(123)
+rdesc2 <- makeResampleDesc("CV", iters = 5,predict = 'both')
+r1    <- resample("classif.rpart",task, rdesc2)
+```
+
+We shall start by creating a search for the most appropriate hyperparameters in order to fine tune the decision tree and possibly have a lower misclassfication error rate.
+
+We shall focus on 3 parameters: *minsplit* which represents the minimum number of observations in a node for a split to take place; *minbucket* represents the minimum number of observations to keep in terminal nodes and *cp* is the complexity parameter. The smaller it is, the more the tree will focus on specific relations in the data which might result in overfitting.
+
+```{r}
+ps1 <- makeParamSet(
+makeIntegerParam('maxdepth', lower = 2, upper = 30),
+makeNumericParam("cp", lower = 0.001, upper = 0.03)
+)
+```
+
+
+### 3.2 Naive Bayes
+
+With the NaiveBayes learner, we obtain the default parameters as shown below. 
+
+```{r}
+getParamSet(learner2)
+```
+
+This parameter is used to smooth conditional probabilities for the features. 
+
+Using its default value of 0 and a 5 fold cross validation and we observe that the error is about 0.05.
+
+```{r}
+set.seed(123)
+rdesc2 <- makeResampleDesc("CV", iters = 5,predict = 'both')
+r2    <- resample("classif.naiveBayes",task, rdesc2)
+```
+
+We shall proceed to fine tune Laplace by creating a search for values from 0 to 50 as shown below.
+
+```{r}
+ps2 <- makeParamSet(
+  makeNumericParam('laplace', lower = 0, upper = 50)
+)
+```
+
+
+### 3.3 Random Forest
+
+With the randomForest learner, we obtain the default hyperparameters as shown below.
+
+```{r}
+getParamSet(learner3)
+```
+
+
+Using these default values and a 5 fold cross validation and we observe that the error is 0.
+
+```{r}
+set.seed(123)
+rdesc2 <- makeResampleDesc("CV", iters = 5,predict = 'both')
+r3    <- resample("classif.randomForest",task, rdesc2)
+```
+
+Although this cannot be improved any further, we can attempt to fine-tune *mtry* i.e mumber of variables randomly sampled as candidates at each split. It is suggested in Breiman (2001) that in a classification problem, the optimum value of mtry = √p where p is the number of descriptive features. In our case, √p = √20 = 4.47.  We therefore experimented with mtry = 3, 4, and 5 to see if tuning it keeps the error just as low. 
+
+
+```{r}
+ps3 <- makeParamSet(
+  makeDiscreteParam('mtry', values = c(3,4,5))
+)
+```
+
+
+As mentioned above, we shall configure a tune control search through the different ranges of parameters set above and employ a 5-CV stratified sampling strategy.
+
+```{r}
+# Configure tune control
+ctrl  <- makeTuneControlGrid()
+ctrrandom<-makeTuneControlRandom(maxit = 100L)
+rdesc <- makeResampleDesc("CV", iters = 5L, stratify = TRUE)
+```
+
+
+```{r}
+# Configure tune wrapper with tuning settings
+tunedLearner1 <- makeTuneWrapper(learner1, rdesc, mmce, ps1, ctrl)
+tunedLearner2 <- makeTuneWrapper(learner2, rdesc, mmce, ps2, ctrl)
+tunedLearner3 <- makeTuneWrapper(learner3, rdesc, mmce, ps3, ctrl)
+```
+
+As an alternative approach, we can also tell R to pick a random value within the grid search that returns the best MMCE result.
+
+```{r}
+# Using random search to find best parameters for decision tree
+set.seed(123)
+res_dec = tuneParams('classif.rpart',task,rdesc,measures = mmce,ps1,ctrrandom,show.info = FALSE)
+print(res_dec)
+```
+
+The random search shows that the max depth is 13, cp is 0.0014 in order to yield a mmce mean of 0.001.
+
+```{r}
+# Using random search to find best parameters for NaiveBayes
+set.seed(123)
+res_nb = tuneParams('classif.naiveBayes', task, rdesc,measures = mmce, ps2,ctrrandom, show.info = FALSE)
+print(res_nb)
+```
+
+The random search shows that optimum laplace value is 0.206 in order to yield a mmce mean of 0.02.
+
+```{r}
+# Using random search to find best parameters for RandomForest
+set.seed(123)
+res_rf = tuneParams('classif.randomForest', task, rdesc,measures = mmce, ps3,ctrrandom, show.info = FALSE)
+print(res_rf)
+```
+
+The random search shows that an mtry value of 4 also yields a mmce mean of 0.
+
+### 3.4 Effect of random search hyperparameters on MMCE
+
+We can visualise the importance of the above hyperparameters on the mean of the mmce rate in each of the classifiers.
+
+```{r,fig.height=3,echo=FALSE}
+psdata_dec = generateHyperParsEffectData(res_dec)
+plotHyperParsEffect(psdata_dec, x = "iteration", y = "mmce.test.mean", plot.type = "line") + ggtitle("Effect of chosen parameters-Decision tree")
+```
+
+These hyperparameters appears to have a considerably significant effect on the mmce. 
+
+```{r,fig.height=3,echo=FALSE}
+psdata_nb = generateHyperParsEffectData(res_nb)
+plotHyperParsEffect(psdata_nb, x = "iteration", y = "mmce.test.mean", plot.type = "line") + ggtitle("Effect of chosen parameters-Naive Bayes")
+```
+
+This smoothing hyperparameter appears to have a considerably significant effect on the mmce and reduces it significantly. 
+
+
+```{r,fig.height=3,echo=FALSE}
+psdata_rf = generateHyperParsEffectData(res_rf)
+plotHyperParsEffect(psdata_rf, x = "iteration", y = "mmce.test.mean", plot.type = "line")+ ggtitle("Effect of chosen parameters-Random Forest")
+```
+
+We observe that in the case of the random Forest, the chosen value of **mtry** results in an mmce value of 0 at any iteration. 
+
+We can observe the results of the grid search hyperparameters.
+
+```{r,include=FALSE}
+# Train the tune wrappers
+tunedMod1  <- train(tunedLearner1, task)
+tunedMod2  <- train(tunedLearner2, task)
+tunedMod3  <- train(tunedLearner3, task)
+```
+
+The optimum values are given as:
+
+* A decision tree with **maxdepth** of 21 and a cp of 0.001 would result in a mmce.test.mean=0.001.
+
+* A Naive Bayes model with a **laplace** value of 0 would result in a mmce.test.mean=0.05.
+
+* A Random Forest model with **mtry** value of 3 would result in a mmce.test.mean=0.
+
+
+With these observations in mind, we shall go on to train the data on the tuned learners, observe their threshold values and visualize their probability thresholds.
+
+
+```{r}
+# Predict on training data
+tunedPred1 <- predict(tunedMod1, task)
+tunedPred2 <- predict(tunedMod2, task)
+tunedPred3 <- predict(tunedMod3, task)
+```
+
+```{r}
+# Obtain threshold values for each learner 
+d1 <- generateThreshVsPerfData(tunedPred1, measures = list(mmce))
+d2 <- generateThreshVsPerfData(tunedPred2, measures = list(mmce))
+d3 <- generateThreshVsPerfData(tunedPred3, measures = list(mmce))
+```
+
+### 3.5 Threshold Adjustment
+
+The following plots depict the value of mmce vs. the range of probability thresholds. The thresholds are approximately **0.01**, **0.98**, and **0.11** for the decision tree, Naive Bayes, and Random Forest classifiers respectively. These thresholds were used to determine the probability of a poisonous mushroom.
+
+```{r,fig.height=3, echo=FALSE}
+plotThreshVsPerf(d1) + labs(title = 'Threshold Adjustment for Decision Tree', x = 'Threshold')
+```
+
+```{r,fig.height=3,echo=FALSE}
+plotThreshVsPerf(d2) + labs(title = 'Threshold Adjustment for NaiveBayes', x = 'Threshold')
+
+```
+
+```{r,fig.height=3,echo=FALSE}
+plotThreshVsPerf(d3) + labs(title = 'Threshold Adjustment for Random Forest', x = 'Threshold')
+
+```
+
+```{r,include=FALSE}
+# Get threshold for each learner
+threshold1 <- d1$data$threshold[ which.min(d1$data$mmce) ]
+threshold2 <- d2$data$threshold[ which.min(d2$data$mmce) ]
+threshold3 <- d3$data$threshold[ which.min(d3$data$mmce) ]
+```
+
+```{r,include=FALSE}
+print(threshold1)
+print(threshold2)
+print(threshold3)
+```
+
+```{r,include=FALSE}
+testPred1 <- predict(tunedMod1, newdata = test_setm)
+testPred2 <- predict(tunedMod2, newdata = test_setm)
+testPred3 <- predict(tunedMod3, newdata = test_setm)
+```
+
+```{r,include=FALSE}
+testPred1 <- setThreshold(testPred1, threshold1 )
+testPred2 <- setThreshold(testPred2, threshold2 )
+testPred3 <- setThreshold(testPred3, threshold3 )
+```
+
+## 4. Evaluation
+
+### 4.1 Confusion Matrix
+
+Using the parameters and threshold levels, we calculated the confusion matrix for each classifier. The confusion matrix of the decision tree is shown below:
+
+```{r,echo=FALSE}
+calculateConfusionMatrix( testPred1,relative = TRUE)
+performance( testPred1 )
+```
+
+The missclassification error rate is calculated as 0.0008. This model does a good job of classifying the edible target value and misclassifies 2 poisonous mushrooms as edible mushrooms.
+
+This can be visualised as shown below. The decision tree does a good job of splitting the dataset on what it considers is the feature with the highest probability,odor.
+
+```{r,figure=5,echo=FALSE}
+mod <- train(learner1,task)
+tree <- getLearnerModel(mod)
+rpart.plot( tree )
+```
+
+
+The confusion matrix for the Naive Bayes is shown below:
+
+```{r,echo=FALSE}
+calculateConfusionMatrix( testPred2,relative = TRUE)
+performance( testPred2 )
+```
+
+The missclassification error rate is calculated as 0.02. This classifier generates 35 false negatives and 17 false positives.
+
+The confusion matrix for the Random Forest model is shown below:
+
+```{r,echo=FALSE}
+calculateConfusionMatrix( testPred3,relative = TRUE)
+performance( testPred3 )
+```
+
+The missclassification error rate is calculated as 0.0004.This model generates 1 false positive and no false negatives.
+
+All classifiers accurately distinguish between edible and poisonous mushrooms with very little error observed. The decision tree and random forest models stand out only missclassifying 2 and 1 poisonous mushrooms as edible(false positives). The Naive Bayes model does not perform as well and has 17 false positives and 35 false negatives with an error of 0.02. Based on class accuracy and mmce, we conclude that the random forest classifier is the better model.
+
+### 4.2 ROC curves
+
+The ROC curve is a visual representation of the true positive rate on the vertical axis and false positive rate on the horizontal axis at a given threshold. This curve gives a visual indication of the strength of the model. A line along the diagonal is representative of a model that makes random predictions e.g a coin flip. The closer the curve is to the top left, the more predictive the model(Kelleher, Mac Namee & D'Arcy 2015).
+
+```{r,echo=FALSE,fig.height=3}
+d1a  = generateThreshVsPerfData(testPred1, measures = list(fpr, tpr))
+p1a = plotROCCurves(d1a) + labs(title = 'ROC curve of the tuned rpart learner', x = "")
+plot(p1a)
+```
+
+
+```{r,echo=FALSE,fig.height=3}
+d2a  = generateThreshVsPerfData(testPred2, measures = list(fpr, tpr))
+
+p2a = plotROCCurves(d2a) + labs(title = 'ROC curve of the tuned Naive Bayes learner', x = "")
+plot(p2a)
+```
+
+```{r,echo=FALSE,fig.height=3}
+d3a  = generateThreshVsPerfData(testPred3, measures = list(fpr, tpr))
+
+p3a = plotROCCurves(d3a) + labs(title = 'ROC curve of the tuned Random Forest learner', x = "")
+plot(p3a)
+```
+
+The three classifiers all appear to be very strong and have a relatively high area under the curve(AUC).
+
+
+### 5. Discussion
+
+The previous section showed that all classifiers considerably well in predicting whether a mushroom was poisonous or edible. The random forest and decision tree are much better then the Naive bayes classifier and have considerably less false positives and false negatives. The slight class imbalance does not seem to affect the models. The models are clearly suitable to work on this classification task with all features categorical. 
+
+Despite the much higher accuracy in predictions in the decision tree and random forest, these models also have a higher tendency to overfit.
+
+In addition, the Naive Bayes model assumes the descriptive features are normally distributed which is not always the case.  
+
+It is also important to consider that the random forest classifier is at an advantage because it is able to run multiple bagged models at each iteration of 500 trees by default.
+
+### 6. Conclusion
+
+The data was split into a training set or test set and validated using a 5 fold cross validation technique. We perform a comparison of the mean misclassification error rate before and after tuning the hyperparameters as well as explore the effect of these on the mmce. Among the three classifiers used in this report, the Random Forest outperforms the decision tree and Naive Bayes models. The random forest only marginally outperforms the decision tree although both have a strong tendency to overfit. In general, the models all perform considerably well in distinguishing between edible and poisonous mushrooms. 
+
+### References
+Kelleher J, Mac Namee B & D'Arcy A 2015, *Fundamentals of Machine Learning for Predictive Analytics: Algorithms, Worked Examples and Case Studies*, Cambridge, Massachusetts Institute of Technology.
+
+Svetnik V, Liaw A, Tong C & Wang T 2004, 'Application of Breiman’s Random Forest to Modeling Structure-Activity Relationships of Pharmaceutical Molecules', *Lecture Notes in Computer Science*, vol. 3077.
