@@ -1,0 +1,920 @@
+---
+title: 'Predicting whether a Mushroom is Edible or Poisonous'
+subtitle: 'MATH 2319 Machine Learning Applied Project Phase I'
+author: "Wesley Paul Nderi (s3635870) "
+date: "03/04/2018"
+output: 
+  html_document:
+  fig_caption: yes
+  number_sections: yes
+  toc: yes
+  toc_depth: 3
+---
+
+\newpage
+
+\tableofcontents
+
+\newpage
+
+# 1. Introduction \label{sec1}
+
+This dataset for the purposes of this assignment is sourced from [Kaggle](https://www.kaggle.com/uciml/mushroom-classification ) although it was originally cited in the UCI Machine Learning Repository. This dataset includes descriptions of hypothetical samples corresponding to 23 species of gilled mushrooms in the Agaricus and Lepiota Family Mushroom drawn from The Audubon Society Field Guide to North American Mushrooms (1981).
+
+The goal in this project is to predict whether a mushroom is edible or poisonous based on its descriptive features.The project has two phases. **Phase I** focuses on data preprocessing and exploration, as covered in this report. We shall explore model building in **Phase II**.
+
+The rest of this report is organised as follows. Section 2 describes the data sets and its attributes. Section 3 covers data pre-processing. In Section 4, we explore each attribute and their inter-relationships. The final section ends with a summary.
+
+
+# 2. Data Set
+
+It is important to highlight that the original dataset available on the UCI Repository has 22 attributes while this has 23 attributes. This is with the addition of the **class** attribute which serves as a target feature.
+
+##2.1 Target feature
+
+The target feature is the class. It has two possible values either **edible** or **poisonous** and hence it is a binary classification problem.
+
+##2.2 Descriptive Features
+
+This dataset has 22 attributes which we shall explore below:
+
+1. **cap-shape**: bell=b, conical=c, convex=x, flat=f, knobbed=k, sunken=s
+
+2. **cap-surface**: fibrous=f, grooves=g, scaly=y, smooth=s 
+
+3. **cap-color**: brown=n, buff=b, cinnamon=c, gray=g, green=r, pink=p,purple=u,red=e, white=w, yellow=y 
+
+4. **bruises**: bruises=t,no=f 
+
+5. **odor**: almond=a, anise=l, creosote=c, fishy=y, foul=f, musty=m, none=n, pungent=p, spicy=s 
+
+6. **gill-attachment**: attached=a, descending=d, free=f, notched=n 
+
+7. **gill-spacing**: close=c, crowded=w, distant=d 
+
+8. **gill-size**: broad=b,narrow=n 
+
+9. **gill-color**: black=k, brown=n, buff=b, chocolate=h, gray=g, green=r, orange=o, pink=p, purple=u, red=e, white=w, yellow=y 
+
+10. **stalk-shape**: enlarging=e, tapering=t 
+
+11. **stalk-root**: bulbous=b, club=c, cup=u, equal=e, rhizomorphs=z, rooted=r, missing=? 
+
+12. **stalk-surface-above-ring**: fibrous=f, scaly=y, silky=k, smooth=s 
+
+13. **stalk-surface-below-ring**: fibrous=f, scaly=y, silky=k, smooth=s 
+
+14. **stalk-color-above-ring**: brown=n, buff=b, cinnamon=c, gray=g, orange=o,  pink=p, red=e, white=w, yellow=y 
+
+15. **stalk-color-below-ring**: brown=n, buff=b, cinnamon=c, gray=g, orange=o, pink=p, red=e, white=w, yellow=y 
+
+16. **veil-type**: partial=p, universal=u 
+
+17. **veil-color**: brown=n, orange=o, white=w, yellow=y 
+
+18. **ring-number**: none=n, one=o, two=t 
+
+19. **ring-type**: cobwebby=c, evanescent=e, flaring=f, large=l, none=n, pendant=p, sheathing=s, zone=z 
+
+20. **spore-print-color**: black=k, brown=n, buff=b, chocolate=h, green=r, orange=o, purple=u, white=w, yellow=y
+
+21. **population**: abundant=a, clustered=c, numerous=n, scattered=s, several=v, solitary=y 
+
+22. **habitat**: grasses=g, leaves=l, meadows=m, paths=p, urban=u, waste=w, woods=d
+
+23. **class:** edible=e, poisonous=p
+
+As we can see, the dataset has features which are entirely categorical in nature.
+
+
+# 3. Data Preprocessing
+
+##3.1 Preliminaries
+
+In this project we used the following R packages.
+
+```{r,message=FALSE}
+library(knitr)
+library(GGally) 
+library(ggplot2)
+library(dplyr)
+library(mlr)
+library(cowplot)
+library(ggmosaic)
+```
+
+For consistency of the data labels during the preprocessing of the data, we manually renamed the columns.
+
+```{r, message=FALSE}
+mushroom1 <-read.csv("/Users/wes/Downloads/mushrooms.csv")
+names(mushroom1) <- c("class","cap_shape", "cap_surface", "cap_color","bruises", "odor", "gill_attachment", "gill_spacing", "gill_size", "gill_color", "stalk_shape", "stalk_root", "stalk_surface_above_ring", "stalk_surface_below_ring", "stalk_color_above_ring", "stalk_color_below_ring", "veil_type", "veil_color", "ring_number", "ring_type", "spore_print_color", "population", "habitat")
+```
+
+
+##3.2 Data Cleaning and Transformation
+
+A quick summary to understand our data better.
+
+```{r}
+summary(mushroom1)
+```
+
+
+We can also have a more concise look at the number of class of each variable.
+
+```{r}
+b<-cbind.data.frame(Var=names(mushroom1), Total_Class=sapply(mushroom1,function(x){as.numeric(length(levels(x)))}))
+print(b)
+```
+
+
+We note that only **veil_type** has one class. In order to improve our models, it would be advantageous to remove the variable from the data.
+
+
+```{r}
+#Omitting the feature veil_type
+mushroom1$veil_type<-NULL
+```
+
+
+The attribute **stalk_root** is the only attribute in the data-set that has a peculiarity. One of the levels in the attribute is marked as a **?** and described as missing. In the context of the data, this means that no observation could be made in regard to the stalk root. This presents a challenge as it could be a case of incorrect labelling and there are mushrooms that do not have this feature and hence constitutes a valid observation. Alternatively, it could be a case of missing values arising from invalid data intergration techniques or some other reason.
+
+Let us explore this attribute **stalk_root** further as shown below.
+
+```{r}
+stalk_root.tab<-table(mushroom1$class, mushroom1$stalk_root)
+stalk_root.tab
+```
+
+We can see that the level **?** has quite a high frequency of both **edible** (e) and **poisonous** (p) which are the binary levels in our target feature.
+
+In total this is: 
+
+```{r}
+margin.table(stalk_root.tab,2) #Column frequencies
+```
+
+It is the second most frequent level in this attribute.
+
+
+For the purposes of this project, we shall treat this as a case of missing values arising from valid data exploration and consider that since the proportion of missing values is above 60% to omit this feature.
+```{r}
+#Omitting the feature stalk_root
+mushroom1$stalk_root<-NULL
+```
+
+
+The table below presents the summary statistics after data-preprocessing.
+```{r}
+summarizeColumns(mushroom1) %>% kable( caption = 'Feature Summary statistics after Data Preprocessing' )
+```
+
+
+```{r}
+#What are the classes of the variables in the dataset?
+sapply(mushroom1,class)
+str(mushroom1)
+```
+
+
+```{r}
+sapply(mushroom1[sapply(mushroom1, is.factor)], table)
+```
+
+We can see that all the variables are factors which shapes the kind of visualisations we shall use in the following section as we explore the relationships between the features.
+
+
+
+#4. Data exploration
+
+##4.1. Categorical features
+
+###4.1.1 Univariate Visualisations
+In this section, each feature is explored individually and split by the classes of the target feature. It is also important to highlight that as the features are all categorical, we shall only focus on explorations suited to this kind of variable.
+
+The color green is used to represent mushrooms that are edible while red is used to represent mushrooms that are poisonous.
+
+
+#### Cap shape
+
+The cap shape according to this data set can take any of the following descriptions and is marked by the letters alongside: 
+
+*  **bell** = b 
+  
+*  **conical** = c
+  
+*  **convex** = x 
+  
+*  **flat** = f 
+  
+*  **knobbed** = k 
+  
+*  **sunken** = s
+
+These are illustrated below and compared against the target feature.
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(cap_shape)) + geom_bar() + labs(title ="Cap shape Bar Chart", x = " " , y = "count")
+
+p2<-ggplot(mushroom1, aes(cap_shape, fill = class)) + geom_bar() + labs(title =" ", x = " ") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(cap_shape, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Cap shape") + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Most mushrooms appear to have a convex cap shape and there is almost an identical number of edible and poisonous ones. However, mushrooms with a bell shape are more likely to be edible. In contrast, mushrooms with a knobbed cap are more likely to be poisonous.
+
+Comparatively, a conical shaped mushroom is almost certain to be poisonous while a sunken shaped one is almost certain to be edible. Both of these are relatively rare to find.
+
+
+
+#### Cap surface
+
+The cap surface according to this data set can take any of the following descriptions and is marked by the letters alongside: 
+
+*  **fibrous** = f 
+  
+*  **grooves** = g
+  
+*  **scaly** = y 
+  
+*  **smooth** = s 
+  
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(cap_surface)) + geom_bar() + labs(title ="Cap surface Bar Chart" , x = " ", y = "count")
+
+p2<-ggplot(mushroom1, aes(cap_surface, fill = class)) + geom_bar() + labs(title =" " , x= " ", y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(cap_surface, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Cap surface" , y = "count")+ scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+A mushroom with a fibrous cap surface is likely to be edible while those with a smooth or scaly surface are more likely to be poisonous. However, those with a scaly or smooth surface have an equal number of the alternative. 
+
+Comparatively, a mushroom with a surface with grooves is almost certain to be poisonous and is not commonly found.
+
+
+#### Cap color
+
+The cap color according to this data set can take any of the following descriptions and is marked by the letters alongside: 
+
+*  **brown** = n 
+  
+*  **buff** = b
+  
+*  **cinnamon** = c
+
+*  **red** = e
+  
+*  **gray** = g 
+
+*  **green** = r 
+  
+*  **pink** = p
+  
+*  **purple** = u 
+  
+*  **white** = w
+
+*  **yellow** = y 
+  
+  
+```{r, echo=FALSE}
+#Cap_color
+p1<-ggplot(mushroom1, aes(cap_color)) + geom_bar() + labs(title ="Cap color Bar Chart", x = " " , y = "count")
+
+p2<-ggplot(mushroom1, aes(cap_color, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(cap_color, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Cap color" , y = "count") + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+
+Most mushrooms appear to be brown and are more likely to be edible although there are also a good number that are poisonous. Similarly, cinnamon, gray and white mushrooms appear to be more edible than poisonous. On the other hand, buff, red, pink and yellow mushrooms are more likely to be poisonous. 
+
+However, green and purple mushrooms are rare to find and almost certain to be edible.
+
+
+### Bruises
+
+A mushroom can appear to have bruises or not and this is marked by the letters alongside as shown below : 
+
+*  **bruises** = t 
+  
+*  **no** = f
+  
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(bruises)) + geom_bar() + labs(title ="Bruises Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(bruises, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(bruises, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Bruises Absent versus Bruises Present" , y = "count of bruises") + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+
+#### Odor
+
+A mushroom can have certain odors and these are marked by the letters alongside as shown below: 
+
+*  **almond** = a
+  
+*  **anisel** = l
+
+*  **creosote** = c
+  
+*  **fishy** = y
+
+*  **foul** = f
+  
+*  **musty** = m
+
+*  **none** = n
+  
+*  **pungent** = p
+
+*  **spicy** = s
+
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(odor)) + geom_bar() + labs(title ="Odor Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(odor, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(odor, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Types of odors present" , y = "count") + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Most mushrooms do not have an odor and these are likely to be edible. In addition, mushrooms with an almond or anisel odor are almost certain to be edible. It is also fairly common to find a mushroom with a foul smell.
+
+In contrast, mushrooms with a creosote, foul, fishy, musty, pungent or spicy smell are almost certain to be poisonous.
+
+
+#### Gill attachment
+
+A mushroom can have certain gill attachment patterns and these are marked by the letters alongside as shown below : 
+
+*  **attached** = a
+  
+*  **descending** = d
+
+*  **free** = f
+  
+*  **notched** = n
+
+
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(gill_attachment)) + geom_bar() + labs(title ="Gill attachment Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(gill_attachment, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo= FALSE}
+p4<- ggplot(mushroom1, aes(gill_attachment, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Gill attachment patterns" , y = "count") + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+
+Most mushrooms appear to either have a free gill pattern or an attached gill pattern. Those with  a free gill pattern are equally likely to be edible or poisonous while those with an attached gill pattern, are almost always edible.
+
+There were no mushrooms found with a notched or descending gill pattern and this may be an indication that these are redundant levels.
+
+#### Gill spacing
+
+A mushroom can have certain gill spacing patterns and these are described below and marked by letters in the dataset indicated alongside as shown below : 
+
+*  **close** = c
+  
+*  **crowded** = w
+  
+*  **distant** = d
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(gill_spacing)) + geom_bar() + labs(title ="Gill Spacing Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(gill_spacing, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(gill_spacing, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Gill Spacing patterns" , y = "count"  )  + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Most mushrooms either have a close or crowded gill spacing pattern. Mushrooms with a close gill spacing are more likely to be poisonous although a considerably large number are also edible. Contrastingly, those with a crowded gill pattern are almost always edible although can occasionally be poisonous.
+
+There were no mushrooms found with a distant gill spacing and this may be an indication that this is a redundant level.
+
+#### Gill size
+
+A mushroom can have either have a broad or narrow gill size and these are described below and marked by letters in the dataset indicated alongside as shown below : 
+
+*  **broad** = b
+  
+*  **narrow** = n
+
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(gill_size)) + geom_bar() + labs(title ="Gill Size Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(gill_size, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(gill_size, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Broad versus Narrow Gill size" , y = "count"  )  + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Broad gill sized mushrooms are more likely to be edible while narrow are more likely to be poisonous.
+
+
+#### Gill color
+
+A mushroom can have certain colors on its gill and these are described below and marked by letters in the dataset indicated alongside as shown below : 
+
+*  **black** = k
+
+*  **brown** = n 
+  
+*  **buff** = b
+  
+*  **chocolate** = h
+
+*  **red** = e
+  
+*  **gray** = g 
+
+*  **green** = r 
+
+*  **orange** = o 
+  
+*  **pink** = p
+  
+*  **purple** = u 
+  
+*  **white** = w
+
+*  **yellow** = y 
+
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(gill_color)) + geom_bar() + labs(title ="Gill Color Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(gill_color, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(gill_color, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Gill color" , y = "count"  ) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Most mushrooms appear to have a buff color along the gill. These mushrooms with this color are also almost always poisonous.
+
+The other colors are relatively less common. Those with a brown, pink, purple, white, yellow color are more likely to be edible while those with a gray or chocolate color are more likely to be poisonous.
+
+Orange and red colored gills certainly indicates that a mushroom is edible while the rare and green colored mushroom is a sure sign that the mushroom is posionous.
+
+
+#### Stalk shape
+
+A mushroom can either have a stalk shape that enlarges or tapers off. These are described below and marked by letters in the dataset indicated alongside as shown below : 
+
+*  **enlarging** = e
+
+*  **tapering** = t 
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(stalk_shape)) + geom_bar() + labs(title ="Stalk Shape Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(stalk_shape, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(stalk_shape, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Enlarging versus Tapering Stalk shape" , y = "count"  )  + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+These two descriptions of the stalk shape appear to give very similar information. However, it is more likely that a mushroom with an enlarging stalk shape is poisonous while that with a tapering is edible.  
+
+
+### Stalk surface above ring
+
+The stalk surface above ring to this data set can take any of the following descriptions and is marked by the letters alongside: 
+
+*  **fibrous** = f 
+  
+*  **silky** = k
+  
+*  **scaly** = y 
+  
+*  **smooth** = s 
+  
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(stalk_surface_above_ring)) + geom_bar() + labs(title ="Stalk Surface Above Ring Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(stalk_surface_above_ring, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(stalk_surface_above_ring, fill = class)) + geom_bar(position = "dodge") + labs(title ="Stalk surface above ring Bar Chart", x = "Stalk surface above ring" , y = "count"  ) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+
+Most mushrooms seem to have a smooth stalk surface above its ring. These smooth stalked mushrooms are also more likely to be edible. It is also fairly common to observe a mushroom with a silky stalk surface above its ring although in contrast, it is more likely to be poisonous.
+
+It is rare to observe mushrooms with a fibrous stalk surface above its ring although they are more likely to be edible.
+
+In addition, it is extremely rare to find mushrooms with a scaly stalk above its ring and this may be an indication that this is a redundant level.
+
+
+#### Stalk surface below ring
+
+The stalk surface below the ring has a similar level description to the stalk surface above the ring because these attributes are only differentiated by their position. The descriptions are similar and hence not shown below.
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(stalk_surface_below_ring)) + geom_bar() + labs(title ="Stalk Surface Below Ring Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(stalk_surface_below_ring, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<- ggplot(mushroom1, aes(stalk_surface_below_ring, fill = class)) + geom_bar(position = "dodge") + labs(title ="Stalk surface below ring Bar Chart", x = "Stalk Surface Below Ring" , y = "count"  ) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+
+There is an almost identical representation between this attribute(stalk surface below the ring) and the previous attribute(stalk surface above the ring). 
+
+The inference is therefore that most mushrooms have the same surface above and below the stalk. The only exception is that there is an increase of mushrooms with a scaly stalk surface below the ring.
+
+Both of these would not be useful for the model as they present the same information and I would merge the two creating a new attribute to reflect this.
+
+
+### Stalk color above ring
+
+The stalk color above ring according to this data set can take any of the following descriptions and is marked by the letters alongside as shown below: 
+
+*  **brown** = n 
+  
+*  **buff** = b
+  
+*  **cinnamon** = c
+
+*  **red** = e
+  
+*  **gray** = g 
+
+*  **orange** = o 
+  
+*  **pink** = p
+  
+*  **white** = w
+
+*  **yellow** = y 
+
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(stalk_color_above_ring)) + geom_bar() + labs(title ="Stalk Color Above Ring Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(stalk_color_above_ring, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+
+```{r,echo=FALSE}
+p4<-ggplot(mushroom1, aes(stalk_color_above_ring, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Stalk Color Above Ring " , y = "count") + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Most mushrooms have a white stalk above the ring and these mushrooms are more likely to be edible. It is fairly common to spot a mushroom with a pink colored stalk below the ring although it is likely to be poisonous. 
+
+Mushrooms with a buff or brown colored stalk below the ring are almost always certain to be poisonous. Although rare, cinnamon colored stalks below the ring also almost always poisonous.
+
+In contrast, red, gray or orange colors on the stalk below the ring are a sure sign that the mushroom is edible.
+
+
+
+### Stalk color below ring
+
+The stalk color below the ring has a similar level description to the stalk color above the ring because these attributes are only differentiated by their position. The descriptions are similar and hence not shown below.
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(stalk_color_below_ring)) + geom_bar() + labs(title ="Stalk Color Below Ring Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(stalk_color_below_ring, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(stalk_color_below_ring, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Stalk Color Below Ring" , y = "count") + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+
+There is an almost identical representation between this attribute(stalk color below the ring) and the previous attribute(stalk color above the ring).
+
+The inference is therefore that most mushrooms have the same color above and below the stalk. There is a slight increase in gray colored stalks below the ring.
+
+Similarly and for reasons stated previously, I would merge these two features and create a new attribute to reflect this.
+
+
+
+#### Veil color
+
+The veil color according to this data set can take any of the following descriptions and is marked by the letters alongside as shown below: 
+
+*  **brown** = n 
+
+*  **orange** = o 
+  
+*  **white** = w
+
+*  **yellow** = y 
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(veil_color)) + geom_bar() + labs(title ="Veil Color Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(veil_color, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(veil_color, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Veil color" , y = "count"  ) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+There is an almost equal number of edible and poisonous white veil mushrooms. 
+
+However, most mushrooms with a brown or orange colored veil are almost certain to be edible while those that are yellow are almost surely posionous.
+
+
+#### Ring number
+
+The ring number according to this data set can take any of the following values and is marked by the letters alongside as shown below: 
+
+*  **none** = n 
+
+*  **one** = o 
+  
+*  **two** = w
+
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(ring_number)) + geom_bar() + labs(title ="Ring number Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(ring_number, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(ring_number, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Ring number" , y = "count"  ) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Majority of the mushrooms have one ring although these are equally likely to be edible as they are posionous. This is an indication that this is not a very descriptive level. In contrast, mushrooms with no rings are almost certain to be poisonous while those with two rings are more likely to be edible than poisonous.
+
+
+#### Ring type
+
+The ring type according to this data set can be described in any of the following ways and is marked by the letters alongside as shown below: 
+
+*  **cobwebby** = c 
+
+*  **evanescent** = e 
+  
+*  **flaring** = f
+
+*  **large** = l 
+
+*  **none** = n 
+  
+*  **pendant** = p
+
+*  **sheathing** = s 
+  
+*  **zone** = z
+
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(ring_type)) + geom_bar() + labs(title ="Ring type Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(ring_type, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(ring_type, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "ring type" , y = "count"  ) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Pendant is the most common ring type and most of these mushrooms in this category are edible. Mushrooms with a flaring ring, although rare, type are certain to be edible. In contrast, those with no rings, similarly rare, are certain to be poisonous.
+
+Mushrooms with a large ring are fairly common and certain to be poisonous.Those with an evanescent ring are more likely to be poisonous although can also occassionally be edible.
+
+
+#### Spore print color
+
+A mushroom can have certain colors on its spore print and these are described below and marked by letters in the dataset indicated alongside as shown below : 
+
+*  **black** = k
+
+*  **brown** = n 
+  
+*  **buff** = b
+  
+*  **chocolate** = h
+
+*  **green** = r 
+
+*  **orange** = o 
+  
+*  **purple** = u 
+  
+*  **white** = w
+
+*  **yellow** = y 
+
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(spore_print_color)) + geom_bar() + labs(title ="Spore print color Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(spore_print_color, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(spore_print_color, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Spore print color" , y = "count"  ) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+The most common colors to be observed in this category are white, brown, black and chocolate. White and chocolate colored spores are more likely to be poisonous while black and brown colored spres are more likely to be eligible.
+
+Buff, orange, purple and yellow colored spores are rare but always certain to be an indication that a mushroom is edible.
+
+On the other hand, green colored spores are similarly rare but a certain indication that a mushroom is poisonous.
+
+
+#### Population
+
+The population a mushroom can be found in according to this data set can be described in any of the following ways and is marked by the letters alongside as shown below: 
+
+*  **abundant** =  a
+
+*  **clustered** = c 
+  
+*  **numerous** = n
+
+*  **scattered** = s
+
+*  **several** = v 
+  
+*  **solitary** = y
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(population)) + geom_bar() + labs(title ="Population Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(population, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<- ggplot(mushroom1, aes(population, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Population" , y = "count"  ) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Most mushrooms are found in several populations and by virtue of this category are more likely to be poisonous. It is also common to find mushrooms in clustered,scattered and solitary populations and in all of these categories are more likely to be edible than poisonous.
+
+Mushrooms appearing in abundant or numerous populations are certain to be edible.
+
+
+#### Habitat
+
+The habitat a mushroom can be found in according to this data set can be described in any of the following ways and is marked by the letters alongside as shown below: 
+
+*  **grasses** =  g
+
+*  **leaves** = l 
+  
+*  **meadows** = m
+
+*  **paths** = p
+
+*  **urban** = u
+
+*  **waste** = w
+
+*  **woods** = d
+
+```{r, echo=FALSE}
+p1<-ggplot(mushroom1, aes(habitat)) + geom_bar() + labs(title ="Habitat Bar Chart", x = " " , y = "count")
+
+p2<- ggplot(mushroom1, aes(habitat, fill = class)) + geom_bar() + labs(title =" ", x = " " , y = "count") + facet_grid(class~.) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+p3<-plot_grid(p1, p2,ncol=2)
+```
+
+```{r, echo=FALSE}
+p4<-ggplot(mushroom1, aes(habitat, fill = class)) + geom_bar(position = "dodge") + labs(title =" ", x = "Habitat" , y = "count"  ) + scale_fill_manual(values = c('#7fbf7b', '#b2182b'))
+
+plot_grid(p3, p4,ncol=1)
+```
+
+Most mushrooms can be found in woods and grasses and in both categories, are more likely to be edible. It is common to find mushrooms along paths and they are more likely to be poisonous.
+
+It is relatively to find mushrooms located in leaves and in urban areas and in both cases if existent, are likely to be poisonous. Similarly, it is difficult to spot mushrooms in meadows, although they are likely to be edible.
+
+Mushrooms located in waste are rare but certain to edible.
+
+
+## 4.1.2 Multivariate Visualisations
+
+###Population, Bruises, and Odor
+
+The following visualisation depicts that overall, most mushrooms do not have an odor, are located in all the various kinds of populations and more often than not do not have bruises. 
+Mushrooms with an almond or anisel odor are most likely to be bruised and equally appear in solitary, several, scattered or numerous populations
+In addition, mushrooms with a pungent odor are most likely bruised and appearing in several or scattered populations.
+
+
+```{r, echo=FALSE,fig.height=8}
+ggplot(mushroom1, aes(x = population, fill = bruises)) + geom_bar(position = 'fill') + facet_grid(odor~.) +labs(title = 'Proportional Bar Chart: Population, Bruises, and Odor') + scale_fill_manual(values = c('#fc8d59', '#91bfdb'))
+
+```
+
+###Habitat, Stalk Shape, and Odor
+
+This proportional bar chart confirms once again, that mushrooms with no odor remain the most represented category, are widely distributed in all the habitats and this time are more likely to have an enlarged stalk shape. The woods have the most mushrooms and there is an almost equal mix of stalk types and the presence of almost every odor with the exception of pungent. The waste habitat as expected, bears mushrooms with a pungent odor and with an enlarged stalk.
+
+```{r, echo=FALSE,fig.height=8}
+ggplot(mushroom1, aes(x = habitat, fill = stalk_shape)) + geom_bar(position = 'fill') + facet_grid(odor~.) +labs(title = 'Proportional Bar Chart: Habitat, Stalk Shape, and Odor') + scale_fill_manual(values = c('#fc8d59', '#91bfdb'))
+```
+
+
+# Summary
+
+This dataset only had categorical features. We omitted **stalk_root** and **veil_type** but other than that, we did not remove the original features of the dataset. From the exploration through visualisations, we see that the remaining features could potentially be useful in prediciting whether a mushroom was edible or poisonous. 
+
